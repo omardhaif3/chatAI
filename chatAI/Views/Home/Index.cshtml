@@ -1,0 +1,177 @@
+﻿@{
+    ViewData["Title"] = "Responsive Chatbot";
+}
+
+<div class="chat-container">
+    <div id="chat-box" class="chat-box"></div>
+    <div class="chat-input-container">
+        <input type="text" id="userMessage" placeholder="Type a message..." autocomplete="off" />
+        <input type="file" id="imageInput" accept="image/*" style="display: none;" onchange="previewImage(event)" />
+        <button class="attach-btn" onclick="document.getElementById('imageInput').click()">📎</button>
+        <button class="send-btn" onclick="sendMessage()">Send</button>
+    </div>
+    <div id="imagePreviewContainer" class="image-preview-container"></div>
+</div>
+
+
+<script>
+    function previewImage(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            const imagePreviewContainer = document.getElementById("imagePreviewContainer");
+            imagePreviewContainer.innerHTML = `
+                    <img src="${e.target.result}" alt="Image Preview">
+                    <span class="cancel-preview-btn" onclick="cancelPreview()">Cancel</span>
+                `;
+            imagePreviewContainer.style.display = "flex";
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function cancelPreview() {
+        document.getElementById("imageInput").value = "";
+        document.getElementById("imagePreviewContainer").style.display = "none";
+    }
+
+    async function sendMessage() {
+        const message = document.getElementById("userMessage").value.trim();
+        const fileInput = document.getElementById("imageInput");
+        const file = fileInput.files[0];
+
+        if (file || message) {
+            addMessage("user", message, file);
+            document.getElementById("userMessage").value = "";
+            cancelPreview();
+
+            if (file) {
+                await sendImageMessage(file, message);
+            } else {
+                addTypingIndicator();
+                await sendTextMessage(message);
+            }
+        }
+    }
+
+    async function sendTextMessage(message) {
+        const response = await fetch('/api/chatbot/message', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: "user123", message: message })
+        });
+
+        const data = await response.json();
+        removeTypingIndicator();
+        typeResponse(data.reply);
+    }
+
+    async function sendImageMessage(file, message) {
+        const formData = new FormData();
+        formData.append("image", file);
+        formData.append("message", message);
+
+        const response = await fetch('/api/chatbot/upload-image', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+        removeTypingIndicator();
+        typeResponse(data.reply);
+    }
+
+    function addMessage(sender, message, file = null) {
+        const messageDiv = document.createElement("div");
+        messageDiv.className = `message ${sender}`;
+
+        const name = document.createElement("div");
+        name.className = "sender-name";
+        name.innerText = sender === "user" ? "User" : "EatdAI";
+        messageDiv.appendChild(name);
+
+        if (file) {
+            const img = document.createElement("img");
+            img.src = URL.createObjectURL(file);
+            img.alt = "Sent Image";
+            img.style.maxWidth = "200px";
+            messageDiv.appendChild(img);
+        }
+
+        if (message) {
+            const textNode = document.createTextNode(message);
+            messageDiv.appendChild(textNode);
+        }
+
+        const timestamp = document.createElement("div");
+        timestamp.className = "timestamp";
+        timestamp.innerText = new Date().toLocaleTimeString();
+
+        messageDiv.appendChild(timestamp);
+
+        document.getElementById("chat-box").appendChild(messageDiv);
+        document.getElementById("chat-box").scrollTop = document.getElementById("chat-box").scrollHeight;
+    }
+
+    function addTypingIndicator() {
+        const typingDiv = document.createElement("div");
+        typingDiv.className = "message bot typing-indicator";
+        typingDiv.id = "typingIndicator";
+
+        const name = document.createElement("div");
+        name.className = "sender-name";
+        name.innerText = "EatdAI";
+        typingDiv.appendChild(name);
+
+        const textNode = document.createTextNode("EatdAI is typing...");
+        typingDiv.appendChild(textNode);
+
+        document.getElementById("chat-box").appendChild(typingDiv);
+        document.getElementById("chat-box").scrollTop = document.getElementById("chat-box").scrollHeight;
+    }
+
+    function removeTypingIndicator() {
+        const typingDiv = document.getElementById("typingIndicator");
+        if (typingDiv) {
+            typingDiv.remove();
+        }
+    }
+
+    function typeResponse(response) {
+        const botMessageDiv = document.createElement("div");
+        botMessageDiv.className = "message bot";
+
+        const name = document.createElement("div");
+        name.className = "sender-name";
+        name.innerText = "EatdAI";
+        botMessageDiv.appendChild(name);
+
+        const textContainer = document.createElement("span");
+        botMessageDiv.appendChild(textContainer);
+
+        const timestamp = document.createElement("div");
+        timestamp.className = "timestamp";
+        timestamp.innerText = new Date().toLocaleTimeString();
+        botMessageDiv.appendChild(timestamp);
+
+        document.getElementById("chat-box").appendChild(botMessageDiv);
+        document.getElementById("chat-box").scrollTop = document.getElementById("chat-box").scrollHeight;
+
+        const words = response.split(' '); // Split the response into words
+        let index = 0;
+
+        const typingInterval = setInterval(() => {
+            if (index < words.length) {
+                // Add the next word with a space
+                textContainer.innerText += (index > 0 ? ' ' : '') + words[index];
+                index++;
+            } else {
+                clearInterval(typingInterval);
+            }
+
+            document.getElementById("chat-box").scrollTop = document.getElementById("chat-box").scrollHeight;
+        }, 50); // Adjust the typing speed here
+    }
+
+</script>
